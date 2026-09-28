@@ -1,18 +1,27 @@
 # NOTES: PUT /users/:id
 
-## The plan I approved
-Claude planned the change in plan mode before touching any code. The plan added an `updateUser(id, { name, email })` helper in `db/store.js`, following the `getUserById` pattern: it returns `undefined` when the user is missing, so the route picks the status code. It then added `PUT /users/:id` in `routes/users.js`. Because PUT is a full replacement, both fields are required. They must be non-empty strings, the email must look like an address, and values are trimmed. The route validates first and looks up second, returning 400 for bad input and a JSON 404 for an unknown id. The plan also pointed out that the 404 test was already passing by accident, since Express returns its default 404 for an unmatched route. So the handler needed to return a real 404 of its own. I approved the plan without edits. PATCH, duplicate-email checks, and tightening POST's validation were left out of scope.
+## The plan
+I had Claude plan in plan mode before it wrote any code, and I approved the plan as written. The plan had two parts:
 
-## Model choice
-Opus 5.5. The feature is small, but most of the work is in edge cases and in reviewing the result, and that's where the stronger model pays off. A cheaper model like Sonnet would probably have been fine for writing the code itself.
+- A new `updateUser` function in `db/store.js`. Like `getUserById`, it returns nothing when the user doesn't exist, so the route decides what to send back.
+- A new `PUT /users/:id` route in `routes/users.js`. PUT replaces the whole user, so both `name` and `email` are required. They have to be non-empty text, the email has to look like an email, and extra spaces are trimmed off. Bad input gets a 400 and an unknown user gets a 404.
 
-## How I split the commits
-1. Store helper (`updateUser`): the data-access layer on its own.
-2. The `PUT` route with validation and 404: the feature itself, which turns the endpoint tests green.
-3. Fix from the review: reject non-integer ids.
-4. This NOTES.md.
+The plan also pointed out something I wouldn't have noticed: the 404 test was already passing before I'd written anything. Express returns its own 404 for a route that doesn't exist, so the test was passing for the wrong reason. Partial updates (PATCH) and duplicate-email checks were left for later.
 
-Each commit is one logical change and passes lint. The review fix is its own commit so that the review's effect shows up in the history.
+## Model
+I used Opus 5.5. The code itself is small, but getting the edge cases right and reviewing the result carefully is where a stronger model helps. Sonnet would probably have been fine for writing the code alone.
+
+## Commits
+I split the work into four commits, one step each:
+
+1. The store function
+2. The route, which is the commit that made the endpoint tests pass
+3. The bug fix from the review
+4. This file
+
+I kept the review fix as its own commit so the history shows what the review changed.
 
 ## What the review caught
-The tests were green, but the review still found a real bug. The route converts the id with `Number()`, which accepts `"0x1"`, `"1e0"` and `"1.0"`, so `PUT /users/0x1` silently updated user 1. The fix is to accept only plain digit ids and return 404 for anything else. The review also confirmed that blank or non-string fields, bad emails, an empty body, and an `id` sent in the body are all handled correctly. One pre-existing issue came up that I left alone: malformed JSON gets Express's default HTML 400 page on every route. The same `Number()` quirk also affects `GET /users/:id`. Both are noted in the PR as follow-ups.
+All the tests passed, and the review still found a real bug. The route turned the id into a number with `Number()`, which also accepts ids like `0x1`, `1e0` and `1.0` as 1. So `PUT /users/0x1` quietly updated user 1. Now only plain digit ids are accepted, and anything else gets a 404.
+
+The review also confirmed these cases already worked: blank or non-text fields, bad emails, an empty body, and an `id` sent in the body (it's ignored). It turned up two older issues that I left alone and listed in the PR: `GET /users/:id` has the same id problem, and badly formed JSON gets Express's HTML error page.
