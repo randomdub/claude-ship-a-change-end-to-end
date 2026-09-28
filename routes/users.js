@@ -54,7 +54,10 @@ router.put("/:id", (req, res) => {
     return res.status(400).json({ error: "email must be a valid email address" });
   }
 
-  const user = store.updateUser(id, { name: name.trim(), email: email.trim() });
+  // Number() accepts forms like "0x1" or "1e0"; only plain digits are real ids.
+  const user = /^\d+$/.test(req.params.id)
+    ? store.updateUser(id, { name: name.trim(), email: email.trim() })
+    : undefined;
 
   if (!user) {
     return res.status(404).json({ error: "User not found" });
